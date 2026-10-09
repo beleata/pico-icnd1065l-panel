@@ -1,0 +1,27 @@
+<!doctype html><html lang="bg"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solar панел</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7f8;color:#202426;font:16px system-ui;letter-spacing:0}main{max-width:720px;margin:auto;padding:24px}h1{font-size:26px}h2{font-size:19px;margin:0 0 20px}section{border-top:1px solid #cbd2d5;padding:24px 0}label{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:18px 0}input[type=password]{width:100%;padding:10px}input[type=color]{width:60px;height:36px;padding:2px;border:1px solid #9ca7ad}input[type=range]{width:55%}button{padding:10px 16px;background:#176b4b;color:white;border:0;border-radius:4px;font:inherit;cursor:pointer}button:disabled{opacity:.5;cursor:wait}select{padding:8px;max-width:60%}#status{font-size:14px;white-space:pre-wrap}#notice{min-height:24px;color:#165b40}progress{width:100%;margin:12px 0}input[type=file]{max-width:100%;margin:12px 0}.danger{background:#8d3030}.muted{color:#526168;font-size:14px}@media(max-width:450px){main{padding:16px}label{gap:8px}h1{font-size:23px}}
+</style><main><h1>Solar панел</h1><div id="status">Свързване…</div><section id="login"><h2>Достъп</h2><label for="token">Ключ за управление</label><input id="token" type="password" autocomplete="off"><p><button id="connect">Вход</button></p></section>
+<form id="settings" hidden><section><h2>Визуализация</h2>
+<label>Яркост <input id="brightness" type="range" min="1" max="100"><output id="level"></output></label>
+<label>Сграда: цифри <input id="load" type="color"></label>
+<label>Мрежа: износ <input id="export_color" type="color"></label>
+<label>Мрежа: внос <input id="import_color" type="color"></label>
+<label>Долен ред <select id="swap_lower"><option value="0">Сграда · Мрежа</option><option value="1">Мрежа · Сграда</option></select></label>
+<label>Завъртане на 180° <input id="rotate" type="checkbox"></label>
+<button type="submit">Запази</button></section></form>
+<section id="firmware" hidden><h2>Софтуер</h2><input id="file" type="file" accept=".panel"><p><button id="update">Обнови</button> <button id="rollback" class="danger">Предишна версия</button></p><progress id="progress" value="0" max="100"></progress></section><p id="notice" role="status"></p></main>
+<script>
+const $=id=>document.getElementById(id);let token='',busy=false;
+const fields=['version','brightness','load','export_color','import_color','swap_lower','rotate'];
+async function api(path,body){const r=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/octet-stream'},body,cache:'no-store'});if(!r.ok)throw Error(await r.text());return r.json()}
+function notice(s){$('notice').textContent=s}
+function disable(v){busy=v;document.querySelectorAll('button').forEach(b=>b.disabled=v)}
+async function status(){if(busy)return;try{const r=await api('status');$('status').textContent=`${r.version} · ${r.ip}\n${r.confirmed?'Готов':'Проверка след стартиране'} · Отчети: ${r.readings} · Грешки: ${r.errors}`;$('rollback').disabled=!r.backup}catch(e){$('status').textContent='Няма връзка с панела'}}
+$('brightness').oninput=()=>{$('level').value=$('brightness').value+'%'};
+$('connect').onclick=async()=>{token=$('token').value.trim();try{const s=await api('settings');for(const f of ['load','export_color','import_color'])$(f).value='#'+s[f].toString(16).padStart(6,'0');$('brightness').value=s.brightness;$('brightness').oninput();$('swap_lower').value=s.swap_lower;$('rotate').checked=!!s.rotate;$('settings').hidden=$('firmware').hidden=false;$('login').hidden=true;$('token').value='';notice('')}catch(e){notice(e.message)}};
+$('settings').onsubmit=async e=>{e.preventDefault();disable(true);try{const values=[1,+$('brightness').value,...['load','export_color','import_color'].map(f=>parseInt($(f).value.slice(1),16)),+$('swap_lower').value,+$('rotate').checked];const bytes=new Uint8Array(28),v=new DataView(bytes.buffer);values.forEach((n,i)=>v.setUint32(i*4,n,true));await api('settings',bytes);notice('Настройките са запазени.')}catch(e){notice(e.message)}finally{disable(false)}};
+$('update').onclick=async()=>{const f=$('file').files[0];if(!f){notice('Избери .panel файл.');return}if(f.size<384||f.size>1007744){notice('Невалиден размер.');return}if(!confirm('Да се обнови софтуерът? Панелът временно ще изгасне.'))return;disable(true);let started=false;try{const b=new Uint8Array(await f.arrayBuffer());const length=new DataView(b.buffer).getUint32(8,true);if(length!==b.length-128)throw Error('Непълен файл.');await api('ota/begin',b.slice(0,128));started=true;for(let i=128;i<b.length;i+=4096){await api('ota/chunk?offset='+(i-128),b.slice(i,i+4096));$('progress').value=Math.round((i-128+Math.min(4096,b.length-i))/(b.length-128)*100)}await api('ota/finish',new Uint8Array());started=false;notice('Прието. Рестартиране и проверка на новата версия…')}catch(e){if(started)try{await api('ota/abort',new Uint8Array())}catch(_){}notice(e.message)}finally{disable(false)}};
+$('rollback').onclick=async()=>{if(!confirm('Да се върне предишната версия?'))return;disable(true);try{await api('ota/rollback',new Uint8Array());notice('Връщане на предишната версия…')}catch(e){notice(e.message)}finally{disable(false)}};
+status();setInterval(status,5000);
+</script></html>
