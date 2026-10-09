@@ -4,7 +4,8 @@ The repository's original code is MIT, copyright 2026 Nasko (beleata).
 
 - `pico/boot/linker/`: adapted linker sources carry their own MIT notice,
   copyright Jakub Zimnol, in `pico/boot/linker/LICENSE`. The application linker
-  also identifies its Pico SDK origin. Preserve those notices.
+  also identifies its Pico SDK origin; the Raspberry Pi BSD notice is retained
+  in `pico/boot/linker/LICENSE.pico-sdk`. Preserve both notices.
 - Pico SDK and its libraries are external build dependencies with their own
   licenses; they are not vendored in this repository.
 - ICND1065L initialization was informed by the upstream DMD_STM32/SPWM
